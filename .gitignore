@@ -1,0 +1,22 @@
+.DS_Store
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+*.jks
+*.keystore
+key.properties
+
+# Windows / Electron
+windows/node_modules/
+windows/dist/
+windows/.cache/
+
+# Release binaries are published through GitHub Releases
+releases/
+
+# IDE
+.idea/
+*.iml
+.vscode/

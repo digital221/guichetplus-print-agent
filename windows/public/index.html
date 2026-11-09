@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Guichet+ Print Agent</title>
+  <style>
+    :root{font-family:Segoe UI,Arial,sans-serif;color:#13242b;background:#eef4f4}body{margin:0}.head{background:linear-gradient(135deg,#071a22,#075f62);color:#fff;padding:24px 34px;display:flex;align-items:center;gap:18px}.brand{width:64px;height:64px;border-radius:16px}.head h1{margin:0 0 6px}.head p{margin:0;color:#d4eeee}.card{background:#fff;margin:26px auto;padding:28px;border-radius:16px;max-width:570px;box-shadow:0 8px 30px #062a3020}label{display:block;font-weight:650;margin:18px 0 7px}input{width:100%;box-sizing:border-box;padding:12px;border:1px solid #b8c8ca;border-radius:8px;font-size:16px}.row{display:flex;gap:12px;margin-top:24px}button{border:0;border-radius:9px;padding:12px 18px;font-weight:700;cursor:pointer;background:#00a39a;color:#fff}.secondary{background:#e4efee;color:#075750}.status{margin-top:20px;padding:13px;border-radius:8px;background:#eef7f6}.ok{color:#087849}.bad{color:#b42318}
+  </style>
+</head>
+<body><header class="head"><img class="brand" src="guichetplus-icon.png" alt=""><div><h1>Guichet+ Print Agent</h1><p>Digital Factory · Impression automatique sécurisée</p></div></header>
+<main class="card"><h2>Imprimante</h2><label for="host">Adresse IP</label><input id="host"><label for="port">Port réseau</label><input id="port" type="number" value="9100">
+<div class="row"><button id="save">Enregistrer</button><button class="secondary" id="test">Imprimer un test</button></div><div id="status" class="status">Vérification…</div></main>
+<script>
+const host=document.querySelector('#host'),port=document.querySelector('#port'),status=document.querySelector('#status');
+const message=(text,ok)=>{status.textContent=text;status.className='status '+(ok?'ok':'bad')};
+async function load(){const c=await fetch('http://127.0.0.1:3210/api/config').then(r=>r.json());host.value=c.printerHost;port.value=c.printerPort;check()}
+async function check(){try{const r=await fetch('http://127.0.0.1:3210/api/health'),j=await r.json();message(j.printer.online?'Imprimante en ligne':'Imprimante hors ligne : '+j.printer.error,j.printer.online)}catch(e){message(e.message,false)}}
+document.querySelector('#save').onclick=async()=>{const r=await fetch('http://127.0.0.1:3210/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({printerHost:host.value,printerPort:Number(port.value)})});message(r.ok?'Configuration enregistrée':'Configuration invalide',r.ok);if(r.ok)check()};
+document.querySelector('#test').onclick=async()=>{message('Impression en cours…',true);try{const r=await fetch('http://127.0.0.1:3210/api/test',{method:'POST'}),j=await r.json();message(r.ok?'Ticket de test imprimé':j.error,r.ok)}catch(e){message(e.message,false)}};load();
+</script></body></html>
