@@ -19,11 +19,12 @@ import java.io.OutputStream;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
     private static final String URL = "https://gplus.digitalfactory.sn/kiosk", PRINTER = "192.168.1.196";
-    private static final String DEFAULT_ADMIN_PASSWORD = "2008";
+    private static final int MIN_ADMIN_PASSWORD_LENGTH = 8;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private SharedPreferences prefs;
     private DevicePolicyManager dpm;
@@ -61,15 +62,15 @@ public final class MainActivity extends Activity {
         TextView title = text(first ? "Configuration initiale Guichet+" : "Réglages Guichet+", 27, true); title.setGravity(Gravity.CENTER); root.addView(title, lp(10));
         TextView help = text("Configurez la borne, le réseau et l’imprimante avant de lancer le kiosk.",16,false); help.setGravity(Gravity.CENTER); root.addView(help,lp(15));
         EditText url=field("URL du kiosque",prefs.getString("url",URL)), host=field("IP de l’imprimante",prefs.getString("host",PRINTER)), port=field("Port ESC/POS",String.valueOf(prefs.getInt("port",9100)));
-        EditText password=field("Nouveau mot de passe administrateur (facultatif)",""); password.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        EditText password=field(hasStoredAdminPassword()?"Nouveau mot de passe administrateur (facultatif, 8 caractères minimum)":"Mot de passe administrateur (8 caractères minimum)",""); password.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
         root.addView(url,lp(5)); root.addView(host,lp(5)); root.addView(port,lp(5)); root.addView(password,lp(8));
         root.addView(text("Wi-Fi actuel : "+wifiName(),16,true),lp(4));
         Button wifi=button("Sélectionner le réseau Wi-Fi"); wifi.setOnClickListener(v->openSettings(Settings.ACTION_WIFI_SETTINGS)); root.addView(wifi,lp(8));
         Button camera=button(checkSelfPermission(android.Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED?"Caméra QR autorisée":"Autoriser la caméra pour les QR codes");
         camera.setOnClickListener(v->requestPermissions(new String[]{android.Manifest.permission.CAMERA},40)); root.addView(camera,lp(8));
         LinearLayout actions=new LinearLayout(this); actions.setGravity(Gravity.CENTER);
-        Button test=button("Tester l’imprimante"); test.setOnClickListener(v->{save(url,host,port,password,false);printTest();}); actions.addView(test);
-        Button done=button(first?"Enregistrer et lancer la borne":"Enregistrer et retourner au kiosk"); done.setOnClickListener(v->{save(url,host,port,password,true);showKiosk();}); actions.addView(done);
+        Button test=button("Tester l’imprimante"); test.setOnClickListener(v->{if(save(url,host,port,password,false))printTest();}); actions.addView(test);
+        Button done=button(first?"Enregistrer et lancer la borne":"Enregistrer et retourner au kiosk"); done.setOnClickListener(v->{if(save(url,host,port,password,true))showKiosk();}); actions.addView(done);
         root.addView(actions,lp(0)); setContentView(root);
     }
 
@@ -110,7 +111,7 @@ public final class MainActivity extends Activity {
         } catch(RuntimeException e){toast("Mode kiosk : "+e.getMessage());}
     }
     private void unlock(){try{stopLockTask();}catch(RuntimeException ignored){}}
-    private void secretTap(){long now=System.currentTimeMillis();taps=now-lastTap<=1500?taps+1:1;lastTap=now;if(taps>=7){taps=0;requestAdminPassword();}}
+    private void secretTap(){long now=System.currentTimeMillis();taps=now-lastTap<=1500?taps+1:1;lastTap=now;if(taps>=7){taps=0;if(hasStoredAdminPassword())requestAdminPassword();else defineAdminPassword();}}
 
     private void requestAdminPassword() {
         final EditText input=field("Mot de passe administrateur","");
@@ -127,6 +128,28 @@ public final class MainActivity extends Activity {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(button->{
                 if(passwordMatches(input.getText().toString())){dialog.dismiss();maintenance();}
                 else {input.setText("");input.setError("Mot de passe incorrect");input.requestFocus();}
+            });
+            input.requestFocus(); dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+        });
+        dialog.show();
+    }
+
+    private void defineAdminPassword() {
+        final EditText input=field("Nouveau mot de passe administrateur","");
+        input.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        input.setPadding(dp(20),dp(8),dp(20),dp(8));
+        AlertDialog dialog=new AlertDialog.Builder(this)
+                .setTitle("Mot de passe administrateur")
+                .setMessage("Aucun mot de passe n’est encore enregistré. Choisissez-en un d’au moins 8 caractères.")
+                .setView(input)
+                .setNegativeButton("Annuler",null)
+                .setPositiveButton("Enregistrer",null)
+                .create();
+        dialog.setOnShowListener(v->{
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(button->{
+                if(input.getText().toString().length()<MIN_ADMIN_PASSWORD_LENGTH){input.setError("8 caractères minimum");input.requestFocus();return;}
+                if(!storeAdminPassword(input.getText().toString())){toast("Impossible d’enregistrer le mot de passe administrateur.");return;}
+                dialog.dismiss(); maintenance();
             });
             input.requestFocus(); dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
         });
@@ -153,9 +176,70 @@ public final class MainActivity extends Activity {
     private void printTest(){print(new byte[]{0x1b,0x40,0x1b,0x61,0x01,0x1b,0x45,0x01,'G','U','I','C','H','E','T','+','\n','T','e','s','t',' ','k','i','o','s','k','\n','\n',0x1d,0x56,0x42,0x00});}
     private void print(byte[] data){String host=prefs.getString("host",PRINTER);int port=prefs.getInt("port",9100);executor.execute(()->{try(Socket s=new Socket()){s.connect(new InetSocketAddress(host,port),4000);OutputStream o=s.getOutputStream();o.write(data);o.flush();runOnUiThread(()->toast("Ticket imprimé"));}catch(Exception e){runOnUiThread(()->toast("Imprimante indisponible : "+e.getMessage()));}});}
 
-    private void save(EditText u,EditText h,EditText p,EditText password,boolean configured){int port=9100;try{port=Integer.parseInt(p.getText().toString().trim());}catch(Exception ignored){}SharedPreferences.Editor edit=prefs.edit().putString("url",u.getText().toString().trim()).putString("host",h.getText().toString().trim()).putInt("port",port).putBoolean("configured",configured||prefs.getBoolean("configured",false));String newPassword=password.getText().toString();if(!newPassword.isEmpty())edit.putString("admin_password_hash",sha256(newPassword));edit.apply();}
-    private boolean passwordMatches(String candidate){String stored=prefs.getString("admin_password_hash",sha256(DEFAULT_ADMIN_PASSWORD));return stored.equals(sha256(candidate));}
-    private String sha256(String value){try{byte[] bytes=MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));StringBuilder result=new StringBuilder();for(byte b:bytes)result.append(String.format("%02x",b));return result.toString();}catch(Exception e){return value;}}
+    private boolean save(EditText u, EditText h, EditText p, EditText password, boolean configured) {
+        String newPassword = password.getText().toString();
+        if (!newPassword.isEmpty() && newPassword.length() < MIN_ADMIN_PASSWORD_LENGTH) {
+            password.setError("8 caractères minimum");
+            toast("Le mot de passe administrateur doit contenir au moins 8 caractères.");
+            return false;
+        }
+        if (configured && !hasStoredAdminPassword() && newPassword.isEmpty()) {
+            password.setError("Mot de passe requis");
+            toast("Définissez un mot de passe administrateur avant de lancer la borne.");
+            return false;
+        }
+        int port = 9100;
+        try { port = Integer.parseInt(p.getText().toString().trim()); } catch (Exception ignored) {}
+        SharedPreferences.Editor edit = prefs.edit()
+                .putString("url", u.getText().toString().trim())
+                .putString("host", h.getText().toString().trim())
+                .putInt("port", port)
+                .putBoolean("configured", configured || prefs.getBoolean("configured", false));
+        if (!newPassword.isEmpty() && !storeAdminPassword(newPassword)) {
+            toast("Impossible d’enregistrer le mot de passe administrateur.");
+            return false;
+        }
+        edit.apply();
+        return true;
+    }
+
+    private boolean storeAdminPassword(String newPassword) {
+        String salt = newPasswordSalt();
+        String hash = sha256(salt + newPassword);
+        if (hash == null) return false;
+        prefs.edit().putString("admin_password_salt", salt).putString("admin_password_hash", hash).apply();
+        return true;
+    }
+
+    private boolean hasStoredAdminPassword() {
+        String stored = prefs.getString("admin_password_hash", "");
+        return stored != null && !stored.isEmpty();
+    }
+
+    private boolean passwordMatches(String candidate) {
+        String stored = prefs.getString("admin_password_hash", "");
+        if (stored == null || stored.isEmpty()) return false;
+        String salt = prefs.getString("admin_password_salt", "");
+        String digest = (salt == null || salt.isEmpty()) ? sha256(candidate) : sha256(salt + candidate);
+        return digest != null && stored.equals(digest);
+    }
+
+    private String newPasswordSalt() {
+        byte[] bytes = new byte[16];
+        new SecureRandom().nextBytes(bytes);
+        return Base64.encodeToString(bytes, Base64.NO_WRAP);
+    }
+
+    private String sha256(String value) {
+        try {
+            byte[] bytes = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder result = new StringBuilder(bytes.length * 2);
+            for (byte b : bytes) result.append(String.format("%02x", b));
+            return result.toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
     private String wifiName(){try{WifiInfo i=((WifiManager)getApplicationContext().getSystemService(WIFI_SERVICE)).getConnectionInfo();String s=i==null?null:i.getSSID();return s==null||"<unknown ssid>".equals(s)?"à sélectionner":s.replace("\"","");}catch(Exception e){return "à sélectionner";}}
     private EditText field(String hint,String value){EditText e=new EditText(this);e.setHint(hint);e.setText(value);e.setSingleLine(true);e.setTextSize(17);return e;}
     private Button button(String value){Button b=new Button(this);b.setText(value);b.setAllCaps(false);return b;}
