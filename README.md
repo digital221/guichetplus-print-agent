@@ -23,10 +23,21 @@ cd android
 gradle :app:assembleDebug
 ```
 
-La publication Google Play utilise une clé d'upload externe au dépôt. Les
-variables `GUICHETPLUS_KEYSTORE_PATH`, `GUICHETPLUS_KEYSTORE_PASSWORD`,
-`GUICHETPLUS_KEY_ALIAS` et `GUICHETPLUS_KEY_PASSWORD` permettent de produire
-un bundle signé avec `gradle :app:bundleRelease`.
+La publication Google Play utilise une clé d'upload externe au dépôt. Sans
+ces valeurs, `gradle :app:bundleRelease` produit un bundle non signé. Les
+propriétés Gradle (`-P` ou `~/.gradle/gradle.properties`) sont lues en
+priorité, puis les variables d'environnement du même nom. L'alias par défaut
+est `guichetplus-upload`. Le chemin du keystore est absolu, ou relatif au
+module `android/app`.
+
+```bash
+cd android
+gradle :app:bundleRelease \
+  -PGUICHETPLUS_KEYSTORE_PATH=/chemin/absolu/upload.jks \
+  -PGUICHETPLUS_KEYSTORE_PASSWORD='mot-de-passe-du-keystore' \
+  -PGUICHETPLUS_KEY_ALIAS=guichetplus-upload \
+  -PGUICHETPLUS_KEY_PASSWORD='mot-de-passe-de-la-cle'
+```
 
 ## Compilation Windows
 
