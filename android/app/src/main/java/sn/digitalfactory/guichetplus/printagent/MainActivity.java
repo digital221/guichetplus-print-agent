@@ -71,7 +71,8 @@ public final class MainActivity extends Activity {
         dpm = (DevicePolicyManager) getSystemService(DEVICE_POLICY_SERVICE);
         admin = new ComponentName(this, KioskDeviceAdminReceiver.class);
         handleUsbIntent(getIntent());
-        if (prefs.getBoolean("configured", false)) showKiosk(); else showSetup(true);
+        boolean configured=prefs.getBoolean("configured",false);
+        if(configured&&prefs.getInt("setup_revision",0)>=1)showKiosk();else showSetup(true);
     }
 
     private void showSetup(boolean first) {
@@ -236,7 +237,7 @@ public final class MainActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("Imprimante Bluetooth appairée").setItems(labels,(dialog,which)->{BluetoothDevice d=devices.get(which);prefs.edit().putString("bt_address",d.getAddress()).putString("bt_name",labels[which]).putString("printer_mode","bluetooth").apply();button.setText("Bluetooth : "+labels[which]);}).setNegativeButton("Annuler",null).show();
     }
 
-    private void save(EditText u,EditText h,EditText p,EditText password,Spinner printerMode,boolean configured){int port=9100;try{port=Integer.parseInt(p.getText().toString().trim());}catch(Exception ignored){}SharedPreferences.Editor edit=prefs.edit().putString("url",u.getText().toString().trim()).putString("host",h.getText().toString().trim()).putInt("port",port).putString("printer_mode",PRINTER_MODE_VALUES[printerMode.getSelectedItemPosition()]).putBoolean("configured",configured||prefs.getBoolean("configured",false));String newPassword=password.getText().toString();if(!newPassword.isEmpty())edit.putString("admin_password_hash",sha256(newPassword));edit.apply();}
+    private void save(EditText u,EditText h,EditText p,EditText password,Spinner printerMode,boolean configured){int port=9100;try{port=Integer.parseInt(p.getText().toString().trim());}catch(Exception ignored){}SharedPreferences.Editor edit=prefs.edit().putString("url",u.getText().toString().trim()).putString("host",h.getText().toString().trim()).putInt("port",port).putString("printer_mode",PRINTER_MODE_VALUES[printerMode.getSelectedItemPosition()]).putBoolean("configured",configured||prefs.getBoolean("configured",false));if(configured)edit.putInt("setup_revision",1);String newPassword=password.getText().toString();if(!newPassword.isEmpty())edit.putString("admin_password_hash",sha256(newPassword));edit.apply();}
     private int modeIndex(String value){for(int i=0;i<PRINTER_MODE_VALUES.length;i++)if(PRINTER_MODE_VALUES[i].equals(value))return i;return 1;}
     private boolean passwordMatches(String candidate){String stored=prefs.getString("admin_password_hash",sha256(DEFAULT_ADMIN_PASSWORD));return stored.equals(sha256(candidate));}
     private String sha256(String value){try{byte[] bytes=MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));StringBuilder result=new StringBuilder();for(byte b:bytes)result.append(String.format("%02x",b));return result.toString();}catch(Exception e){return value;}}

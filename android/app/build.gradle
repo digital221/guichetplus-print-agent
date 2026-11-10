@@ -8,8 +8,8 @@ android {
         applicationId 'sn.digitalfactory.guichetplus.printagent'
         minSdk 26
         targetSdk 36
-        versionCode 3
-        versionName '1.1.1'
+        versionCode 4
+        versionName '1.1.2'
     }
 
     def keystorePath = System.getenv('GUICHETPLUS_KEYSTORE_PATH')
