@@ -185,7 +185,7 @@ public final class MainActivity extends Activity {
 
     private boolean intercept(String u){if(!u.startsWith("intent:base64,"))return false;int end=u.indexOf("#Intent;");if(end<0){toast("Ticket ESC/POS invalide");return true;}try{print(Base64.decode(u.substring(14,end),Base64.DEFAULT));}catch(Exception e){toast("Ticket ESC/POS illisible");}return true;}
     private void printTest(){print(new byte[]{0x1b,0x40,0x1b,0x61,0x01,0x1b,0x45,0x01,'G','U','I','C','H','E','T','+','\n','T','e','s','t',' ','k','i','o','s','k','\n','\n',0x1d,0x56,0x42,0x00});}
-    private void print(byte[] data){executor.execute(()->{try{String via=sendToPrinter(data);runOnUiThread(()->toast("Ticket imprimé via "+via));}catch(Exception e){runOnUiThread(()->toast("Imprimante indisponible : "+e.getMessage()));}});}
+    private void print(byte[] data){executor.execute(()->{try{sendToPrinter(data);}catch(Exception e){runOnUiThread(()->toast("Imprimante indisponible : "+e.getMessage()));}});}
 
     private String sendToPrinter(byte[] data)throws Exception{
         String mode=prefs.getString("printer_mode","network");
