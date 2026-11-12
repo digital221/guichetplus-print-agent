@@ -7,6 +7,11 @@ directement à une imprimante réseau sur le port 9100, sans RawBT.
 Le menu Réglages permet de modifier l'URL du kiosque, l'IP et le port de
 l'imprimante, puis d'imprimer un ticket de test.
 
+Le profil **Universel · imprimantes chinoises** est activé par défaut. Il
+convertit les commandes graphiques courantes vers `ESC *` afin de conserver le
+logo sur les firmwares ESC/POS anciens ou partiels. Les profils natif et ancien
+modèle restent disponibles dans les réglages.
+
 La première configuration exige un mot de passe administrateur d'au moins
 8 caractères. Aucun mot de passe n'est fourni par défaut. L'application
 n'enregistre qu'un condensat SHA-256 salé. Un condensat déjà présent sur

@@ -3,6 +3,7 @@ const http = require('node:http');
 const net = require('node:net');
 const fs = require('node:fs');
 const path = require('node:path');
+const { adapt: adaptEscPos } = require('./escpos-compat.cjs');
 
 const ORIGIN = 'https://gplus.digitalfactory.sn';
 let mainWindow;
@@ -10,8 +11,8 @@ let server;
 
 function configPath() { return path.join(app.getPath('userData'), 'config.json'); }
 function readConfig() {
-  try { return { printerHost: '192.168.1.196', printerPort: 9100, ...JSON.parse(fs.readFileSync(configPath(), 'utf8')) }; }
-  catch { return { printerHost: '192.168.1.196', printerPort: 9100 }; }
+  try { return { printerHost: '192.168.1.196', printerPort: 9100, printerProfile: 'auto', ...JSON.parse(fs.readFileSync(configPath(), 'utf8')) }; }
+  catch { return { printerHost: '192.168.1.196', printerPort: 9100, printerProfile: 'auto' }; }
 }
 function writeConfig(value) { fs.writeFileSync(configPath(), JSON.stringify(value, null, 2)); }
 function cors(req) {
@@ -37,11 +38,12 @@ async function body(req) {
 }
 function sendPrinter(payload) {
   const config = readConfig();
+  const compatiblePayload = adaptEscPos(payload, config.printerProfile);
   return new Promise((resolve, reject) => {
     const socket = net.createConnection({ host: config.printerHost, port: Number(config.printerPort) });
     const timer = setTimeout(() => socket.destroy(new Error('Délai imprimante dépassé')), 5000);
-    socket.once('connect', () => socket.end(payload));
-    socket.once('close', hadError => { clearTimeout(timer); if (!hadError) resolve({ bytes: payload.length, ...config }); });
+    socket.once('connect', () => socket.end(compatiblePayload));
+    socket.once('close', hadError => { clearTimeout(timer); if (!hadError) resolve({ bytes: compatiblePayload.length, ...config }); });
     socket.once('error', error => { clearTimeout(timer); reject(error); });
   });
 }
@@ -60,7 +62,8 @@ function startServer() {
       if (req.method === 'POST' && url.pathname === '/api/config') {
         const data = await body(req); const port = Number(data.printerPort);
         if (!String(data.printerHost || '').trim() || !Number.isInteger(port) || port < 1 || port > 65535) return json(res, 422, { error: 'Configuration invalide' }, headers);
-        writeConfig({ printerHost: String(data.printerHost).trim(), printerPort: port });
+        const profile = ['auto', 'native', 'legacy'].includes(data.printerProfile) ? data.printerProfile : 'auto';
+        writeConfig({ printerHost: String(data.printerHost).trim(), printerPort: port, printerProfile: profile });
         return json(res, 200, readConfig(), headers);
       }
       if (req.method === 'POST' && url.pathname === '/api/print/raw') {

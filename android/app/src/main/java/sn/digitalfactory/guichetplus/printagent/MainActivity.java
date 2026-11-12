@@ -32,6 +32,8 @@ public final class MainActivity extends Activity {
     private static final String ACTION_USB_PERMISSION = "sn.digitalfactory.guichetplus.USB_PERMISSION";
     private static final String[] PRINTER_MODES = {"Automatique (USB → Bluetooth → Réseau)","Réseau (IP)","USB","Bluetooth"};
     private static final String[] PRINTER_MODE_VALUES = {"auto","network","usb","bluetooth"};
+    private static final String[] PRINTER_PROFILES = {"Universel · imprimantes chinoises","ESC/POS moderne · Epson compatible","Ancien modèle · ESC *"};
+    private static final String[] PRINTER_PROFILE_VALUES = {EscPosCompat.AUTO,EscPosCompat.NATIVE,EscPosCompat.LEGACY};
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private SharedPreferences prefs;
     private DevicePolicyManager dpm;
@@ -91,6 +93,7 @@ public final class MainActivity extends Activity {
         card.addView(sectionLabel("01  VOTRE BORNE"),lp(10));card.addView(url,lp(22));
         card.addView(sectionLabel("02  IMPRESSION"),lp(10));
         Spinner printerMode=new Spinner(this);printerMode.setBackgroundResource(R.drawable.setup_field);printerMode.setPadding(dp(14),0,dp(14),0);printerMode.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,PRINTER_MODES));printerMode.setSelection(modeIndex(prefs.getString("printer_mode","network")));card.addView(printerMode,fixedLp(54,10));
+        Spinner printerProfile=new Spinner(this);printerProfile.setBackgroundResource(R.drawable.setup_field);printerProfile.setPadding(dp(14),0,dp(14),0);printerProfile.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,PRINTER_PROFILES));printerProfile.setSelection(profileIndex(prefs.getString("printer_profile",EscPosCompat.AUTO)));card.addView(printerProfile,fixedLp(54,10));
         LinearLayout networkRow=new LinearLayout(this);networkRow.setOrientation(LinearLayout.HORIZONTAL);networkRow.addView(host,new LinearLayout.LayoutParams(0,dp(54),2));LinearLayout.LayoutParams portLp=new LinearLayout.LayoutParams(0,dp(54),1);portLp.setMargins(dp(8),0,0,0);networkRow.addView(port,portLp);card.addView(networkRow,lp(10));
         Button usb=secondaryButton(prefs.contains("usb_vendor")?"USB · "+prefs.getString("usb_name","enregistrée"):"Connecter une imprimante USB");usb.setOnClickListener(v->{printerMode.setSelection(2);selectUsbPrinter(usb);});card.addView(usb,fixedLp(52,8));
         Button bluetooth=secondaryButton(prefs.contains("bt_address")?"Bluetooth · "+prefs.getString("bt_name","enregistrée"):"Connecter une imprimante Bluetooth");bluetooth.setOnClickListener(v->{printerMode.setSelection(3);selectBluetoothPrinter(bluetooth);});card.addView(bluetooth,fixedLp(52,22));
@@ -100,8 +103,8 @@ public final class MainActivity extends Activity {
         Button camera=button(checkSelfPermission(android.Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED?"Caméra QR autorisée":"Autoriser la caméra pour les QR codes");
         camera.setBackgroundResource(R.drawable.setup_button_secondary);camera.setOnClickListener(v->requestPermissions(new String[]{android.Manifest.permission.CAMERA},40));card.addView(camera,fixedLp(52,10));
         card.addView(password,lp(18));
-        Button test=secondaryButton("Imprimer un ticket de test"); test.setOnClickListener(v->{if(save(url,host,port,password,printerMode,false))printTest();});card.addView(test,fixedLp(52,10));
-        Button done=primaryButton(first?"Lancer ma borne":"Enregistrer et retourner au kiosk");done.setOnClickListener(v->{if(save(url,host,port,password,printerMode,true))showKiosk();});card.addView(done,fixedLp(58,0));
+        Button test=secondaryButton("Imprimer un ticket de test"); test.setOnClickListener(v->{if(save(url,host,port,password,printerMode,printerProfile,false))printTest();});card.addView(test,fixedLp(52,10));
+        Button done=primaryButton(first?"Lancer ma borne":"Enregistrer et retourner au kiosk");done.setOnClickListener(v->{if(save(url,host,port,password,printerMode,printerProfile,true))showKiosk();});card.addView(done,fixedLp(58,0));
         TextView footer=text("DIGITAL FACTORY  ·  BORNE SÉCURISÉE",12,true);footer.setTextColor(Color.rgb(177,216,213));footer.setGravity(Gravity.CENTER);root.addView(footer,lp(0));
         scroll.addView(root,new ScrollView.LayoutParams(-1,-2));backdrop.addView(scroll,new FrameLayout.LayoutParams(-1,-1));setContentView(backdrop);
     }
@@ -211,6 +214,7 @@ public final class MainActivity extends Activity {
     private void print(byte[] data){executor.execute(()->{try{sendToPrinter(data);}catch(Exception e){runOnUiThread(()->toast("Imprimante indisponible : "+e.getMessage()));}});}
 
     private String sendToPrinter(byte[] data)throws Exception{
+        data=EscPosCompat.adapt(data,prefs.getString("printer_profile",EscPosCompat.AUTO));
         String mode=prefs.getString("printer_mode","network");
         if("usb".equals(mode)){sendUsb(data);return "USB";}
         if("bluetooth".equals(mode)){sendBluetooth(data);return "Bluetooth";}
@@ -260,7 +264,7 @@ public final class MainActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("Imprimante Bluetooth appairée").setItems(labels,(dialog,which)->{BluetoothDevice d=devices.get(which);prefs.edit().putString("bt_address",d.getAddress()).putString("bt_name",labels[which]).putString("printer_mode","bluetooth").apply();button.setText("Bluetooth : "+labels[which]);}).setNegativeButton("Annuler",null).show();
     }
 
-    private boolean save(EditText u, EditText h, EditText p, EditText password, Spinner printerMode, boolean configured) {
+    private boolean save(EditText u, EditText h, EditText p, EditText password, Spinner printerMode, Spinner printerProfile, boolean configured) {
         String newPassword = password.getText().toString();
         if (!newPassword.isEmpty() && newPassword.length() < MIN_ADMIN_PASSWORD_LENGTH) {
             password.setError("8 caractères minimum");
@@ -279,6 +283,7 @@ public final class MainActivity extends Activity {
                 .putString("host", h.getText().toString().trim())
                 .putInt("port", port)
                 .putString("printer_mode", PRINTER_MODE_VALUES[printerMode.getSelectedItemPosition()])
+                .putString("printer_profile", PRINTER_PROFILE_VALUES[printerProfile.getSelectedItemPosition()])
                 .putBoolean("configured", configured || prefs.getBoolean("configured", false));
         if (configured) edit.putInt("setup_revision", 1);
         if (!newPassword.isEmpty() && !storeAdminPassword(newPassword)) {
@@ -327,6 +332,7 @@ public final class MainActivity extends Activity {
         }
     }
     private int modeIndex(String value){for(int i=0;i<PRINTER_MODE_VALUES.length;i++)if(PRINTER_MODE_VALUES[i].equals(value))return i;return 1;}
+    private int profileIndex(String value){for(int i=0;i<PRINTER_PROFILE_VALUES.length;i++)if(PRINTER_PROFILE_VALUES[i].equals(value))return i;return 0;}
     private String wifiName(){try{WifiInfo i=((WifiManager)getApplicationContext().getSystemService(WIFI_SERVICE)).getConnectionInfo();String s=i==null?null:i.getSSID();return s==null||"<unknown ssid>".equals(s)?"à sélectionner":s.replace("\"","");}catch(Exception e){return "à sélectionner";}}
     private EditText field(String hint,String value){EditText e=new EditText(this);e.setHint(hint);e.setText(value);e.setSingleLine(true);e.setTextSize(16);e.setTextColor(Color.rgb(15,42,49));e.setHintTextColor(Color.rgb(105,126,130));e.setPadding(dp(15),0,dp(15),0);e.setBackgroundResource(R.drawable.setup_field);e.setSelectAllOnFocus(false);return e;}
     private Button button(String value){Button b=new Button(this);b.setText(value);b.setAllCaps(false);return b;}

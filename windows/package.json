@@ -1,6 +1,6 @@
 {
   "name": "guichetplus-print-agent",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Agent d'impression ESC/POS local pour Guichet+",
   "main": "main.cjs",
   "author": "Digital Factory",
@@ -17,7 +17,7 @@
   "build": {
     "appId": "sn.digitalfactory.guichetplus.printagent",
     "productName": "Guichet+ Print Agent",
-    "files": ["main.cjs", "public/**/*", "package.json"],
+    "files": ["main.cjs", "escpos-compat.cjs", "public/**/*", "package.json"],
     "directories": { "output": "dist" },
     "asar": true,
     "win": {

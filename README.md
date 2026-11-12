@@ -11,6 +11,11 @@ imprimer directement les tickets sans dialogue système ni RawBT.
 Les deux clients consomment le flux ESC/POS composé par Guichet+ afin de
 conserver le logo, le numéro agrandi, le code-barres et la découpe.
 
+Le profil d'impression **Universel** convertit automatiquement les images
+`GS v 0` et `GS ( L` vers le format historique `ESC *`. Le logo reste ainsi
+imprimable sur la majorité des imprimantes thermiques ESC/POS génériques,
+notamment les modèles OEM chinois dont le firmware est partiellement compatible.
+
 ## Téléchargements
 
 Les installateurs officiels sont disponibles dans la
