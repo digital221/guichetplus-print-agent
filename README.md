@@ -5,8 +5,8 @@ imprimer directement les tickets sans dialogue système ni RawBT.
 
 - **Android** : launcher kiosk WebView, configuration URL/Wi-Fi/imprimante,
   lecteur QR/caméra, impression ESC/POS réseau et maintenance protégée.
-- **Windows** : agent d’impression local lancé avec Windows et écran de
-  configuration.
+- **Windows** : agent d’impression local lancé avec Windows, compatible réseau,
+  imprimantes USB/Bluetooth Windows et ports série Bluetooth `COM`.
 
 Les deux clients consomment le flux ESC/POS composé par Guichet+ afin de
 conserver le logo, le numéro agrandi, le code-barres et la découpe.

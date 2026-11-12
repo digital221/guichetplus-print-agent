@@ -2,7 +2,17 @@
 
 Agent Electron local écoutant uniquement sur `127.0.0.1:3210`. Il accepte les
 flux ESC/POS signés par l'application Guichet+ depuis l'origine de production,
-les envoie à l'imprimante réseau et démarre automatiquement avec Windows.
+les envoie à l'imprimante et démarre automatiquement avec Windows.
+
+Trois transports sont disponibles et mémorisés :
+
+- réseau TCP, généralement sur le port `9100` ;
+- file d'impression Windows RAW pour une imprimante USB ou Bluetooth installée ;
+- port série Bluetooth `COM` à 9 600, 19 200, 38 400, 57 600 ou 115 200 bauds.
+
+Le bouton d'actualisation détecte les imprimantes et ports série disponibles.
+Une imprimante USB doit disposer de son pilote Windows. Une imprimante Bluetooth
+doit être appairée dans Windows avant sa sélection dans GUICHET+ Kiosk.
 
 Le profil **Universel · imprimantes chinoises** convertit les formats raster
 modernes vers `ESC *` avant l'envoi. Le logo reste ainsi imprimable sur les

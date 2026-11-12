@@ -1,18 +1,19 @@
 const { app, BrowserWindow } = require('electron');
 const http = require('node:http');
-const net = require('node:net');
 const fs = require('node:fs');
 const path = require('node:path');
 const { adapt: adaptEscPos } = require('./escpos-compat.cjs');
+const transports = require('./windows-transports.cjs');
 
 const ORIGIN = 'https://gplus.digitalfactory.sn';
 let mainWindow;
 let server;
 
 function configPath() { return path.join(app.getPath('userData'), 'config.json'); }
+const defaults = { transport: 'network', printerHost: '192.168.1.196', printerPort: 9100, printerName: '', serialPort: '', serialBaud: 9600, printerProfile: 'auto' };
 function readConfig() {
-  try { return { printerHost: '192.168.1.196', printerPort: 9100, printerProfile: 'auto', ...JSON.parse(fs.readFileSync(configPath(), 'utf8')) }; }
-  catch { return { printerHost: '192.168.1.196', printerPort: 9100, printerProfile: 'auto' }; }
+  try { return { ...defaults, ...JSON.parse(fs.readFileSync(configPath(), 'utf8')) }; }
+  catch { return { ...defaults }; }
 }
 function writeConfig(value) { fs.writeFileSync(configPath(), JSON.stringify(value, null, 2)); }
 function cors(req) {
@@ -36,16 +37,10 @@ async function body(req) {
   for await (const chunk of req) { size += chunk.length; if (size > 768 * 1024) throw new Error('Requête trop volumineuse'); chunks.push(chunk); }
   return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
 }
-function sendPrinter(payload) {
+async function sendPrinter(payload) {
   const config = readConfig();
   const compatiblePayload = adaptEscPos(payload, config.printerProfile);
-  return new Promise((resolve, reject) => {
-    const socket = net.createConnection({ host: config.printerHost, port: Number(config.printerPort) });
-    const timer = setTimeout(() => socket.destroy(new Error('Délai imprimante dépassé')), 5000);
-    socket.once('connect', () => socket.end(compatiblePayload));
-    socket.once('close', hadError => { clearTimeout(timer); if (!hadError) resolve({ bytes: compatiblePayload.length, ...config }); });
-    socket.once('error', error => { clearTimeout(timer); reject(error); });
-  });
+  return { ...(await transports.send(compatiblePayload, config, app.isPackaged ? process.resourcesPath : null, __dirname)), ...config };
 }
 function startServer() {
   server = http.createServer(async (req, res) => {
@@ -55,15 +50,20 @@ function startServer() {
       if (req.method === 'OPTIONS') { res.writeHead(Object.keys(headers).length ? 204 : 403, headers); return res.end(); }
       if (req.method === 'GET' && url.pathname === '/api/health') {
         const config = readConfig();
-        try { await sendPrinter(Buffer.alloc(0)); return json(res, 200, { service: 'ok', printer: { online: true, ...config } }, headers); }
+        try { await transports.check(config); return json(res, 200, { service: 'ok', printer: { online: true, ...config } }, headers); }
         catch (error) { return json(res, 503, { service: 'ok', printer: { online: false, ...config, error: error.message } }, headers); }
       }
+      if (req.method === 'GET' && url.pathname === '/api/devices') return json(res, 200, await transports.listDevices(), headers);
       if (req.method === 'GET' && url.pathname === '/api/config') return json(res, 200, readConfig(), headers);
       if (req.method === 'POST' && url.pathname === '/api/config') {
-        const data = await body(req); const port = Number(data.printerPort);
-        if (!String(data.printerHost || '').trim() || !Number.isInteger(port) || port < 1 || port > 65535) return json(res, 422, { error: 'Configuration invalide' }, headers);
+        const data = await body(req); const port = Number(data.printerPort); const baud = Number(data.serialBaud || 9600);
+        const transport = ['network', 'windows', 'serial'].includes(data.transport) ? data.transport : '';
+        if (!transport) return json(res, 422, { error: 'Mode de connexion invalide' }, headers);
+        if (transport === 'network' && (!String(data.printerHost || '').trim() || !Number.isInteger(port) || port < 1 || port > 65535)) return json(res, 422, { error: 'Adresse réseau invalide' }, headers);
+        if (transport === 'windows' && !String(data.printerName || '').trim()) return json(res, 422, { error: 'Sélectionnez une imprimante USB/Bluetooth Windows' }, headers);
+        if (transport === 'serial' && (!/^COM\d+$/i.test(String(data.serialPort || '')) || ![9600,19200,38400,57600,115200].includes(baud))) return json(res, 422, { error: 'Port Bluetooth COM invalide' }, headers);
         const profile = ['auto', 'native', 'legacy'].includes(data.printerProfile) ? data.printerProfile : 'auto';
-        writeConfig({ printerHost: String(data.printerHost).trim(), printerPort: port, printerProfile: profile });
+        writeConfig({ transport, printerHost: String(data.printerHost || '').trim(), printerPort: port || 9100, printerName: String(data.printerName || '').trim(), serialPort: String(data.serialPort || '').toUpperCase(), serialBaud: baud, printerProfile: profile });
         return json(res, 200, readConfig(), headers);
       }
       if (req.method === 'POST' && url.pathname === '/api/print/raw') {
