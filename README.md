@@ -1,4 +1,4 @@
-# Guichet+ Print Agent
+# GUICHET+ Kiosk
 
 Clients officiels Digital Factory pour exploiter Guichet+ en mode borne et
 imprimer directement les tickets sans dialogue système ni RawBT.

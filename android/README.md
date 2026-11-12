@@ -1,4 +1,4 @@
-# Guichet+ Print Agent Android
+# GUICHET+ Kiosk Android
 
 Application kiosk Android autonome. Elle charge Guichet+ dans une WebView,
 intercepte le flux ESC/POS `intent:base64` généré par le serveur et l'envoie

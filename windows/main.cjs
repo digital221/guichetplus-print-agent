@@ -83,7 +83,7 @@ function startServer() {
   server.listen(3210, '127.0.0.1');
 }
 function createWindow(show = true) {
-  mainWindow = new BrowserWindow({ width: 720, height: 620, show, title: 'Guichet+ Print Agent', icon: path.join(__dirname, 'public', 'guichetplus-icon.png'), webPreferences: { contextIsolation: true, nodeIntegration: false } });
+  mainWindow = new BrowserWindow({ width: 720, height: 620, show, title: 'GUICHET+ Kiosk', icon: path.join(__dirname, 'public', 'guichetplus-icon.png'), webPreferences: { contextIsolation: true, nodeIntegration: false } });
   mainWindow.loadFile(path.join(__dirname, 'public', 'index.html'));
   mainWindow.on('close', event => { if (!app.isQuitting) { event.preventDefault(); mainWindow.hide(); } });
 }

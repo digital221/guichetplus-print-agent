@@ -17,7 +17,7 @@
         android:fullBackupContent="false"
         android:icon="@drawable/guichetplus_icon"
         android:roundIcon="@drawable/guichetplus_icon"
-        android:label="Guichet+ Kiosk"
+        android:label="GUICHET+ Kiosk"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
         <activity
