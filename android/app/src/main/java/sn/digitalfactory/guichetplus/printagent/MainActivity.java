@@ -27,7 +27,8 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
-    private static final String URL = "https://gplus.digitalfactory.sn/kiosk", PRINTER = "192.168.1.196";
+    private static final String URL = "https://gplus.digitalfactory.sn/kiosk", PRINTER = "";
+    private static final String LEGACY_DEFAULT_PRINTER = "192.168.1.196";
     private static final int MIN_ADMIN_PASSWORD_LENGTH = 8;
     private static final String ACTION_USB_PERMISSION = "sn.digitalfactory.guichetplus.USB_PERMISSION";
     private static final String[] PRINTER_MODES = {"Automatique (USB → Bluetooth → Réseau)","Réseau (IP)","USB","Bluetooth"};
@@ -74,6 +75,7 @@ public final class MainActivity extends Activity {
         super.onCreate(b);
         keepScreenAwake();
         prefs = getSharedPreferences("agent", MODE_PRIVATE);
+        if(!prefs.getBoolean("configured",false)&&LEGACY_DEFAULT_PRINTER.equals(prefs.getString("host","")))prefs.edit().remove("host").apply();
         usbManager = (UsbManager)getSystemService(USB_SERVICE);
         IntentFilter usbFilter = new IntentFilter(ACTION_USB_PERMISSION);
         if(android.os.Build.VERSION.SDK_INT>=33)registerReceiver(usbPermissionReceiver,usbFilter,Context.RECEIVER_NOT_EXPORTED);else registerReceiver(usbPermissionReceiver,usbFilter);
@@ -94,13 +96,18 @@ public final class MainActivity extends Activity {
         TextView help = text(first?"Préparons votre borne en quelques instants.":"Modifiez votre borne en toute sécurité.",16,false);help.setTextColor(Color.rgb(207,235,233));help.setGravity(Gravity.CENTER);root.addView(help,lp(22));
         LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(25),dp(24),dp(25),dp(24));card.setBackgroundResource(R.drawable.setup_card);card.setElevation(dp(10));
         LinearLayout.LayoutParams cardLp=new LinearLayout.LayoutParams(-1,-2);cardLp.setMargins(0,0,0,dp(18));cardLp.width=Math.min(dp(680),getResources().getDisplayMetrics().widthPixels-dp(48));root.addView(card,cardLp);
-        EditText url=field("URL du kiosque",prefs.getString("url",URL)), host=field("IP de l’imprimante",prefs.getString("host",PRINTER)), port=field("Port ESC/POS",String.valueOf(prefs.getInt("port",9100)));
-        EditText password=field(hasStoredAdminPassword()?"Nouveau mot de passe administrateur (facultatif, 8 caractères minimum)":"Mot de passe administrateur (8 caractères minimum)",""); password.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        card.addView(sectionLabel("01  VOTRE BORNE"),lp(10));card.addView(url,lp(22));
+        EditText url=field("https://exemple.com/kiosk",prefs.getString("url",URL)), host=field("Ex. 192.168.1.50",prefs.getString("host",PRINTER)), port=field("9100",String.valueOf(prefs.getInt("port",9100)));
+        url.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_URI);
+        boolean passwordExists=hasStoredAdminPassword();
+        EditText password=field("8 caractères minimum","");password.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        EditText passwordConfirmation=field("Retapez le mot de passe","");passwordConfirmation.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        card.addView(sectionLabel("01  VOTRE BORNE"),lp(10));card.addView(inputLabel("Adresse du kiosque"),lp(6));card.addView(url,lp(6));card.addView(helperText("Adresse complète commençant par https:// ou http://."),lp(22));
         card.addView(sectionLabel("02  IMPRESSION"),lp(10));
-        Spinner printerMode=new Spinner(this);printerMode.setBackgroundResource(R.drawable.setup_field);printerMode.setPadding(dp(14),0,dp(14),0);printerMode.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,PRINTER_MODES));printerMode.setSelection(modeIndex(prefs.getString("printer_mode","network")));card.addView(printerMode,fixedLp(54,10));
+        Spinner printerMode=new Spinner(this);printerMode.setBackgroundResource(R.drawable.setup_field);printerMode.setPadding(dp(14),0,dp(14),0);printerMode.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,PRINTER_MODES));printerMode.setSelection(modeIndex(prefs.getString("printer_mode","auto")));card.addView(printerMode,fixedLp(54,10));
         Spinner printerProfile=new Spinner(this);printerProfile.setBackgroundResource(R.drawable.setup_field);printerProfile.setPadding(dp(14),0,dp(14),0);printerProfile.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,PRINTER_PROFILES));printerProfile.setSelection(profileIndex(prefs.getString("printer_profile",EscPosCompat.AUTO)));card.addView(printerProfile,fixedLp(54,10));
+        TextView networkLabel=inputLabel("Imprimante réseau (facultatif pour USB/Bluetooth)");card.addView(networkLabel,lp(6));
         LinearLayout networkRow=new LinearLayout(this);networkRow.setOrientation(LinearLayout.HORIZONTAL);networkRow.addView(host,new LinearLayout.LayoutParams(0,dp(54),2));LinearLayout.LayoutParams portLp=new LinearLayout.LayoutParams(0,dp(54),1);portLp.setMargins(dp(8),0,0,0);networkRow.addView(port,portLp);card.addView(networkRow,lp(10));
+        printerMode.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?> parent){}public void onItemSelected(AdapterView<?> parent,View view,int position,long id){int visibility=(position==0||position==1)?View.VISIBLE:View.GONE;networkLabel.setVisibility(visibility);networkRow.setVisibility(visibility);}});
         Button usb=secondaryButton(prefs.contains("usb_vendor")?"USB · "+prefs.getString("usb_name","enregistrée"):"Connecter une imprimante USB");usb.setOnClickListener(v->{printerMode.setSelection(2);selectUsbPrinter(usb);});card.addView(usb,fixedLp(52,8));
         Button bluetooth=secondaryButton(prefs.contains("bt_address")?"Bluetooth · "+prefs.getString("bt_name","enregistrée"):"Connecter une imprimante Bluetooth");bluetooth.setOnClickListener(v->{printerMode.setSelection(3);selectBluetoothPrinter(bluetooth);});card.addView(bluetooth,fixedLp(52,22));
         card.addView(sectionLabel("03  CONNEXION ET SÉCURITÉ"),lp(10));
@@ -108,9 +115,12 @@ public final class MainActivity extends Activity {
         Button wifi=secondaryButton("Sélectionner le réseau Wi-Fi"); wifi.setOnClickListener(v->openSettings(Settings.ACTION_WIFI_SETTINGS)); card.addView(wifi,fixedLp(52,8));
         Button camera=button(checkSelfPermission(android.Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED?"Caméra QR autorisée":"Autoriser la caméra pour les QR codes");
         camera.setBackgroundResource(R.drawable.setup_button_secondary);camera.setOnClickListener(v->requestPermissions(new String[]{android.Manifest.permission.CAMERA},40));card.addView(camera,fixedLp(52,10));
-        card.addView(password,lp(18));
-        Button test=secondaryButton("Imprimer un ticket de test"); test.setOnClickListener(v->{if(save(url,host,port,password,printerMode,printerProfile,false))printTest();});card.addView(test,fixedLp(52,10));
-        Button done=primaryButton(first?"Lancer ma borne":"Enregistrer et retourner au kiosk");done.setOnClickListener(v->{if(save(url,host,port,password,printerMode,printerProfile,true))showKiosk();});card.addView(done,fixedLp(58,0));
+        card.addView(inputLabel(passwordExists?"Nouveau mot de passe administrateur":"Mot de passe administrateur"),lp(6));card.addView(password,lp(8));
+        card.addView(inputLabel("Confirmation du mot de passe"),lp(6));card.addView(passwordConfirmation,lp(6));
+        card.addView(helperText(passwordExists?"Laissez les deux champs vides pour conserver le mot de passe actuel.":"Utilisez au minimum 8 caractères."),lp(6));
+        CheckBox showPassword=new CheckBox(this);showPassword.setText("Afficher les mots de passe");showPassword.setTextColor(Color.rgb(66,86,91));showPassword.setOnCheckedChangeListener((button,checked)->{int type=android.text.InputType.TYPE_CLASS_TEXT|(checked?android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD:android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);password.setInputType(type);passwordConfirmation.setInputType(type);password.setSelection(password.length());passwordConfirmation.setSelection(passwordConfirmation.length());});card.addView(showPassword,lp(18));
+        Button test=secondaryButton("Imprimer un ticket de test"); test.setOnClickListener(v->{if(save(url,host,port,password,passwordConfirmation,printerMode,printerProfile,false))printTest();});card.addView(test,fixedLp(52,10));
+        Button done=primaryButton(first?"Lancer ma borne":"Enregistrer et retourner au kiosk");done.setOnClickListener(v->{if(save(url,host,port,password,passwordConfirmation,printerMode,printerProfile,true))showKiosk();});card.addView(done,fixedLp(58,0));
         TextView footer=text("DIGITAL FACTORY  ·  BORNE SÉCURISÉE",12,true);footer.setTextColor(Color.rgb(177,216,213));footer.setGravity(Gravity.CENTER);root.addView(footer,lp(0));
         scroll.addView(root,new ScrollView.LayoutParams(-1,-2));backdrop.addView(scroll,new FrameLayout.LayoutParams(-1,-1));setContentView(backdrop);
     }
@@ -307,12 +317,21 @@ public final class MainActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("Imprimante Bluetooth ou virtuelle").setItems(labels,(dialog,which)->{BluetoothDevice d=devices.get(which);closeBluetoothPrinter();prefs.edit().putString("bt_address",d.getAddress()).putString("bt_name",labels[which]).putString("printer_mode","bluetooth").apply();button.setText("Bluetooth : "+labels[which]);}).setNegativeButton("Annuler",null).show();
     }
 
-    private boolean save(EditText u, EditText h, EditText p, EditText password, Spinner printerMode, Spinner printerProfile, boolean configured) {
+    private boolean save(EditText u, EditText h, EditText p, EditText password, EditText passwordConfirmation, Spinner printerMode, Spinner printerProfile, boolean configured) {
+        String kioskUrl=u.getText().toString().trim();
+        Uri parsedUrl=Uri.parse(kioskUrl);
+        if(kioskUrl.isEmpty()||parsedUrl.getHost()==null||!("https".equalsIgnoreCase(parsedUrl.getScheme())||"http".equalsIgnoreCase(parsedUrl.getScheme()))){
+            u.setError("Saisissez une adresse complète http:// ou https://");u.requestFocus();toast("L’adresse du kiosque n’est pas valide.");return false;
+        }
         String newPassword = password.getText().toString();
+        String confirmedPassword=passwordConfirmation.getText().toString();
         if (!newPassword.isEmpty() && newPassword.length() < MIN_ADMIN_PASSWORD_LENGTH) {
             password.setError("8 caractères minimum");
             toast("Le mot de passe administrateur doit contenir au moins 8 caractères.");
             return false;
+        }
+        if(!newPassword.equals(confirmedPassword)){
+            passwordConfirmation.setError("Les mots de passe ne correspondent pas");passwordConfirmation.requestFocus();toast("La confirmation du mot de passe est différente.");return false;
         }
         if (configured && !hasStoredAdminPassword() && newPassword.isEmpty()) {
             password.setError("Mot de passe requis");
@@ -321,11 +340,15 @@ public final class MainActivity extends Activity {
         }
         int port = 9100;
         try { port = Integer.parseInt(p.getText().toString().trim()); } catch (Exception ignored) {}
+        String printerModeValue=PRINTER_MODE_VALUES[printerMode.getSelectedItemPosition()];
+        String printerHost=h.getText().toString().trim();
+        if("network".equals(printerModeValue)&&printerHost.isEmpty()){h.setError("Adresse requise en mode réseau");h.requestFocus();toast("Saisissez l’adresse de l’imprimante réseau.");return false;}
+        if(("network".equals(printerModeValue)||!printerHost.isEmpty())&&(port<1||port>65535)){p.setError("Port entre 1 et 65535");p.requestFocus();return false;}
         SharedPreferences.Editor edit = prefs.edit()
-                .putString("url", u.getText().toString().trim())
-                .putString("host", h.getText().toString().trim())
+                .putString("url", kioskUrl)
+                .putString("host", printerHost)
                 .putInt("port", port)
-                .putString("printer_mode", PRINTER_MODE_VALUES[printerMode.getSelectedItemPosition()])
+                .putString("printer_mode", printerModeValue)
                 .putString("printer_profile", PRINTER_PROFILE_VALUES[printerProfile.getSelectedItemPosition()])
                 .putBoolean("configured", configured || prefs.getBoolean("configured", false));
         if (configured) edit.putInt("setup_revision", 1);
@@ -381,6 +404,8 @@ public final class MainActivity extends Activity {
     private Button button(String value){Button b=new Button(this);b.setText(value);b.setAllCaps(false);return b;}
     private Button primaryButton(String value){Button b=button(value);b.setTextColor(Color.WHITE);b.setTextSize(16);b.setTypeface(null,android.graphics.Typeface.BOLD);b.setBackgroundResource(R.drawable.setup_button_primary);return b;}
     private Button secondaryButton(String value){Button b=button(value);b.setTextColor(Color.rgb(9,111,108));b.setTextSize(15);b.setBackgroundResource(R.drawable.setup_button_secondary);return b;}
+    private TextView inputLabel(String value){TextView t=text(value,14,true);t.setTextColor(Color.rgb(37,65,70));return t;}
+    private TextView helperText(String value){TextView t=text(value,12,false);t.setTextColor(Color.rgb(91,111,115));return t;}
     private TextView sectionLabel(String value){TextView t=text(value,13,true);t.setTextColor(Color.rgb(9,132,126));t.setLetterSpacing(.08f);return t;}
     private TextView text(String value,int size,boolean bold){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(Color.rgb(15,42,49));if(bold)t.setTypeface(null,android.graphics.Typeface.BOLD);return t;}
     private LinearLayout.LayoutParams lp(int bottom){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,0,0,dp(bottom));return p;}

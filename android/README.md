@@ -25,6 +25,12 @@ Si la borne est déjà configurée mais qu'aucun condensat n'est enregistré, se
 appuis dans le coin inférieur gauche demandent d'en choisir un avant d'ouvrir
 la maintenance.
 
+L'onboarding affiche des libellés permanents pour l'URL, l'imprimante et le
+mot de passe. L'URL doit être complète, le mot de passe doit être confirmé et
+peut être affiché temporairement. Aucune IP d'imprimante n'est préremplie sur
+une nouvelle installation. Une IP réellement enregistrée reste conservée lors
+des mises à jour.
+
 L'identifiant installé sur l'appareil est `sn.digitalfactory.guichetplus.kiosk`.
 Le paquet Java des composants reste `sn.digitalfactory.guichetplus.printagent`.
 Après une réinitialisation d'usine, le mode Device Owner s'active avec :
