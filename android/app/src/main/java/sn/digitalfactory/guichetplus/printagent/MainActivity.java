@@ -66,7 +66,7 @@ public final class MainActivity extends Activity {
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        keepScreenAwake();
         prefs = getSharedPreferences("agent", MODE_PRIVATE);
         usbManager = (UsbManager)getSystemService(USB_SERVICE);
         IntentFilter usbFilter = new IntentFilter(ACTION_USB_PERMISSION);
@@ -144,8 +144,16 @@ public final class MainActivity extends Activity {
             IntentFilter home=new IntentFilter(Intent.ACTION_MAIN); home.addCategory(Intent.CATEGORY_HOME); home.addCategory(Intent.CATEGORY_DEFAULT);
             dpm.addPersistentPreferredActivity(admin,home,new ComponentName(this,MainActivity.class));
             dpm.setGlobalSetting(admin,Settings.Global.STAY_ON_WHILE_PLUGGED_IN,"7");
+            dpm.setSystemSetting(admin,Settings.System.SCREEN_OFF_TIMEOUT,String.valueOf(Integer.MAX_VALUE));
             if(dpm.isLockTaskPermitted(getPackageName())) startLockTask();
         } catch(RuntimeException e){toast("Mode kiosk : "+e.getMessage());}
+    }
+    private void keepScreenAwake(){
+        Window window=getWindow();
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        WindowManager.LayoutParams attributes=window.getAttributes();
+        attributes.screenBrightness=1.0f;
+        window.setAttributes(attributes);
     }
     private void unlock(){try{stopLockTask();}catch(RuntimeException ignored){}}
     private void secretTap(){long now=System.currentTimeMillis();taps=now-lastTap<=1500?taps+1:1;lastTap=now;if(taps>=7){taps=0;if(hasStoredAdminPassword())requestAdminPassword();else defineAdminPassword();}}

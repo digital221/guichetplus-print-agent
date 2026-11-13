@@ -35,3 +35,7 @@ toutes les 15 minutes uniquement après au moins 5 minutes sans interaction.
 L'orientation utilise le capteur complet de l'appareil (`fullSensor`) : portrait,
 paysage et leurs positions inversées sont appliqués automatiquement sans
 redémarrer la WebView.
+
+Pendant l'exécution du kiosque, l'écran reste allumé et la luminosité ne diminue
+pas. En mode Device Owner, le délai d'extinction est également porté à sa valeur
+maximale et l'appareil reste éveillé lorsqu'il est alimenté.
