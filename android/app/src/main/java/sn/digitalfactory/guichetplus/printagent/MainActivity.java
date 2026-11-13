@@ -16,6 +16,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.util.Base64;
+import android.util.Log;
 import android.view.*;
 import android.webkit.*;
 import android.widget.*;
@@ -140,23 +141,33 @@ public final class MainActivity extends Activity {
         android.webkit.CookieManager.getInstance().setAcceptCookie(true); android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(web,true);
         web.setWebChromeClient(new WebChromeClient(){
             @Override public void onPermissionRequest(PermissionRequest request){
+                Log.i("GuichetWeb","Permission web demandée par "+request.getOrigin()+" : "+Arrays.toString(request.getResources()));
                 for(String resource:request.getResources()) if(PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)){
-                    if(checkSelfPermission(android.Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED) request.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
-                    else {cameraRequest=request;requestPermissions(new String[]{android.Manifest.permission.CAMERA},40);} return;
+                    runOnUiThread(()->{if(checkSelfPermission(android.Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED)request.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});else{cameraRequest=request;requestPermissions(new String[]{android.Manifest.permission.CAMERA},40);}});return;
                 }
                 request.deny();
             }
+            @Override public boolean onConsoleMessage(ConsoleMessage message){Log.i("GuichetWeb",message.messageLevel()+" "+message.sourceId()+":"+message.lineNumber()+" "+message.message());return true;}
         });
         web.setWebViewClient(new WebViewClient(){
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest r){return intercept(r.getUrl().toString());}
             @Override public boolean shouldOverrideUrlLoading(WebView v,String u){return intercept(u);}
             @Override public void onReceivedError(WebView v,WebResourceRequest r,WebResourceError e){if(r.isForMainFrame())handler.postDelayed(()->{if(web!=null)web.reload();},5000);}
+            @Override public void onPageFinished(WebView v,String u){super.onPageFinished(v,u);installCameraCompatibility(v);}
         });
         web.setOnTouchListener((v,event)->{lastInteraction=System.currentTimeMillis();return false;});
         web.setFocusableInTouchMode(true); web.requestFocus();
         root.addView(web,new LinearLayout.LayoutParams(-1,0,1)); frame.addView(root,new FrameLayout.LayoutParams(-1,-1));
         View secret=new View(this); secret.setContentDescription("Zone maintenance"); secret.setOnClickListener(v->secretTap()); frame.addView(secret,new FrameLayout.LayoutParams(dp(120),dp(120),Gravity.BOTTOM|Gravity.START));
         setContentView(frame); web.loadUrl(prefs.getString("url",URL)); startNetworkRecovery(); handler.removeCallbacks(refreshWatchdog); handler.postDelayed(refreshWatchdog,15*60_000L); lock();
+    }
+
+    private void installCameraCompatibility(WebView view){
+        String script="(()=>{if(window.__guichetCameraFix)return;window.__guichetCameraFix=true;"+
+                "const media=navigator.mediaDevices;if(media&&media.getUserMedia){const original=media.getUserMedia.bind(media);media.getUserMedia=c=>{const next={...(c||{})};if(next.video){const video=typeof next.video==='object'?{...next.video}:{};delete video.deviceId;video.facingMode={ideal:'user'};next.video=video;}return original(next);};}"+
+                "const fix=v=>{try{v.muted=true;v.defaultMuted=true;v.autoplay=true;v.playsInline=true;v.setAttribute('muted','');v.setAttribute('autoplay','');v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');if(v.srcObject&&v.paused)v.play().catch(()=>{});}catch(e){}};"+
+                "const all=()=>document.querySelectorAll('video').forEach(fix);all();new MutationObserver(all).observe(document.documentElement,{childList:true,subtree:true});setInterval(all,500);document.addEventListener('visibilitychange',()=>{if(!document.hidden)all();});})();";
+        view.evaluateJavascript(script,null);
     }
 
     private void lock() {

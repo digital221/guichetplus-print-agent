@@ -23,6 +23,9 @@ Sur Android 13 et versions ultérieures, l'autorisation des appareils Wi-Fi à
 proximité permet d'afficher le SSID réellement connecté dans la configuration.
 Le formulaire se redimensionne avec le clavier et fait défiler automatiquement
 le champ de mot de passe actif pour conserver la saisie et la confirmation visibles.
+Le scanner QR du check-in utilise toujours la caméra frontale. Le WebView force
+également le flux caméra en lecture automatique silencieuse et intégrée pour les
+tablettes Samsung.
 
 La première configuration exige un mot de passe administrateur d'au moins
 8 caractères. Aucun mot de passe n'est fourni par défaut. L'application
