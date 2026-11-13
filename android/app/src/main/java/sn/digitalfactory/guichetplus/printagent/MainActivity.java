@@ -6,6 +6,7 @@ import android.annotation.SuppressLint;
 import android.bluetooth.*;
 import android.content.*;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.content.pm.PackageManager;
 import android.hardware.usb.*;
 import android.net.*;
@@ -90,7 +91,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showSetup(boolean first) {
-        unlock(); showBars();
+        unlock(); showBars();getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE|WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
         FrameLayout backdrop=new FrameLayout(this);backdrop.setBackgroundResource(R.drawable.setup_background);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setClipToPadding(false);
         LinearLayout root = new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setGravity(Gravity.CENTER_HORIZONTAL);root.setPadding(dp(24),dp(34),dp(24),dp(34));
@@ -104,6 +105,9 @@ public final class MainActivity extends Activity {
         boolean passwordExists=hasStoredAdminPassword();
         EditText password=field("8 caractères minimum","");password.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
         EditText passwordConfirmation=field("Retapez le mot de passe","");passwordConfirmation.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        password.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_NEXT);passwordConfirmation.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        keepFieldVisible(scroll,password);keepFieldVisible(scroll,passwordConfirmation);
+        password.setOnEditorActionListener((view,action,event)->{if(action==android.view.inputmethod.EditorInfo.IME_ACTION_NEXT){passwordConfirmation.requestFocus();revealField(scroll,passwordConfirmation);return true;}return false;});
         card.addView(sectionLabel("01  VOTRE BORNE"),lp(10));card.addView(inputLabel("Adresse du kiosque"),lp(6));card.addView(url,lp(6));card.addView(helperText("Adresse complète commençant par https:// ou http://."),lp(22));
         card.addView(sectionLabel("02  IMPRESSION"),lp(10));
         Spinner printerMode=new Spinner(this);printerMode.setBackgroundResource(R.drawable.setup_field);printerMode.setPadding(dp(14),0,dp(14),0);printerMode.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,PRINTER_MODES));printerMode.setSelection(modeIndex(prefs.getString("printer_mode","auto")));card.addView(printerMode,fixedLp(54,10));
@@ -429,6 +433,14 @@ public final class MainActivity extends Activity {
     private Button button(String value){Button b=new Button(this);b.setText(value);b.setAllCaps(false);return b;}
     private Button primaryButton(String value){Button b=button(value);b.setTextColor(Color.WHITE);b.setTextSize(16);b.setTypeface(null,android.graphics.Typeface.BOLD);b.setBackgroundResource(R.drawable.setup_button_primary);return b;}
     private Button secondaryButton(String value){Button b=button(value);b.setTextColor(Color.rgb(9,111,108));b.setTextSize(15);b.setBackgroundResource(R.drawable.setup_button_secondary);return b;}
+    private void keepFieldVisible(ScrollView scroll,EditText field){field.setOnFocusChangeListener((view,focused)->{if(focused)revealField(scroll,field);});field.setOnClickListener(view->revealField(scroll,field));}
+    private void revealField(ScrollView scroll,View field){handler.postDelayed(()->{
+        Rect visible=new Rect();field.getWindowVisibleDisplayFrame(visible);int decorHeight=getWindow().getDecorView().getHeight();int visibleBottom=Math.min(visible.bottom,(int)(decorHeight*.48f));
+        if(android.os.Build.VERSION.SDK_INT>=30){WindowInsets insets=field.getRootWindowInsets();if(insets!=null){int keyboard=insets.getInsets(WindowInsets.Type.ime()).bottom;if(keyboard>0)visibleBottom=Math.min(visibleBottom,decorHeight-keyboard);}}
+        int[] position=new int[2];field.getLocationInWindow(position);int fieldBottom=position[1]+field.getHeight();int margin=dp(28);
+        if(fieldBottom>visibleBottom-margin)scroll.smoothScrollBy(0,fieldBottom-(visibleBottom-margin));
+        else if(position[1]<visible.top+margin)scroll.smoothScrollBy(0,position[1]-(visible.top+margin));
+    },400);}
     private TextView inputLabel(String value){TextView t=text(value,14,true);t.setTextColor(Color.rgb(37,65,70));return t;}
     private TextView helperText(String value){TextView t=text(value,12,false);t.setTextColor(Color.rgb(91,111,115));return t;}
     private TextView sectionLabel(String value){TextView t=text(value,13,true);t.setTextColor(Color.rgb(9,132,126));t.setLetterSpacing(.08f);return t;}
