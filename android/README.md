@@ -16,6 +16,9 @@ La connexion Bluetooth classique et virtuelle utilise SPP/RFCOMM. Elle reste
 ouverte entre deux tickets pour réduire fortement la latence et se reconnecte
 automatiquement en cas de coupure. L'application essaie successivement les
 modes RFCOMM sécurisé, non sécurisé et le canal série 1 pour les modules OEM.
+Le sélecteur distingue clairement l'appairage Android de la sélection dans
+GUICHET+ Kiosk : il liste les appareils déjà appairés, marque l'imprimante
+active et permet d'ouvrir les réglages Bluetooth puis d'actualiser la liste.
 
 La première configuration exige un mot de passe administrateur d'au moins
 8 caractères. Aucun mot de passe n'est fourni par défaut. L'application

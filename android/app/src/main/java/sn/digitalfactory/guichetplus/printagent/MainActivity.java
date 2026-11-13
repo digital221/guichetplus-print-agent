@@ -41,6 +41,7 @@ public final class MainActivity extends Activity {
     private ComponentName admin;
     private WebView web;
     private boolean returningFromSettings;
+    private boolean reopenBluetoothChooser;
     private int taps;
     private long lastTap;
     private long lastInteraction = System.currentTimeMillis();
@@ -312,9 +313,15 @@ public final class MainActivity extends Activity {
     private void selectBluetoothPrinter(Button button){
         if(android.os.Build.VERSION.SDK_INT>=31&&checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{android.Manifest.permission.BLUETOOTH_CONNECT},41);toast("Autorisez Bluetooth puis appuyez de nouveau");return;}
         BluetoothAdapter adapter=BluetoothAdapter.getDefaultAdapter();if(adapter==null){toast("Bluetooth indisponible");return;}if(!adapter.isEnabled()){openSettings(Settings.ACTION_BLUETOOTH_SETTINGS);return;}
-        ArrayList<BluetoothDevice> devices=new ArrayList<>(adapter.getBondedDevices());if(devices.isEmpty()){toast("Aucune imprimante appairée. Appairez-la dans Android.");openSettings(Settings.ACTION_BLUETOOTH_SETTINGS);return;}
-        String[] labels=new String[devices.size()];for(int i=0;i<devices.size();i++){BluetoothDevice d=devices.get(i);labels[i]=(d.getName()==null?"Bluetooth":d.getName())+" ("+d.getAddress()+")";}
-        new AlertDialog.Builder(this).setTitle("Imprimante Bluetooth ou virtuelle").setItems(labels,(dialog,which)->{BluetoothDevice d=devices.get(which);closeBluetoothPrinter();prefs.edit().putString("bt_address",d.getAddress()).putString("bt_name",labels[which]).putString("printer_mode","bluetooth").apply();button.setText("Bluetooth : "+labels[which]);}).setNegativeButton("Annuler",null).show();
+        ArrayList<BluetoothDevice> devices=new ArrayList<>(adapter.getBondedDevices());devices.sort((a,b)->String.valueOf(a.getName()).compareToIgnoreCase(String.valueOf(b.getName())));
+        String selected=prefs.getString("bt_address","");String[] labels=new String[devices.size()];
+        for(int i=0;i<devices.size();i++){BluetoothDevice d=devices.get(i);String name=d.getName()==null?"Imprimante Bluetooth":d.getName();labels[i]=(d.getAddress().equals(selected)?"✓  ":"")+name+"  ·  "+d.getAddress();}
+        AlertDialog.Builder builder=new AlertDialog.Builder(this).setTitle("Imprimante Bluetooth");
+        if(devices.isEmpty())builder.setMessage("Aucune imprimante n’est encore appairée avec cette tablette. Mettez l’imprimante en mode appairage, puis ouvrez les réglages Bluetooth.");
+        else builder.setItems(labels,(dialog,which)->{BluetoothDevice d=devices.get(which);String name=d.getName()==null?"Imprimante Bluetooth":d.getName();closeBluetoothPrinter();prefs.edit().putString("bt_address",d.getAddress()).putString("bt_name",name+" · "+d.getAddress()).putString("printer_mode","bluetooth").apply();if(button!=null)button.setText("Bluetooth · "+name+" sélectionnée");toast("Imprimante Bluetooth sélectionnée : "+name);});
+        builder.setPositiveButton("Appairer une nouvelle imprimante",(dialog,which)->{reopenBluetoothChooser=true;openSettings(Settings.ACTION_BLUETOOTH_SETTINGS);});
+        builder.setNeutralButton("Actualiser",(dialog,which)->handler.postDelayed(()->selectBluetoothPrinter(button),250));
+        builder.setNegativeButton("Fermer",null).show();
     }
 
     private boolean save(EditText u, EditText h, EditText p, EditText password, EditText passwordConfirmation, Spinner printerMode, Spinner printerProfile, boolean configured) {
@@ -415,7 +422,7 @@ public final class MainActivity extends Activity {
     private void immersive(){getWindow().getDecorView().setSystemUiVisibility(5894|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);}
     private void showBars(){getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);}
     @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] results){super.onRequestPermissionsResult(requestCode,permissions,results);if(requestCode==40&&cameraRequest!=null){if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)cameraRequest.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});else cameraRequest.deny();cameraRequest=null;}}
-    @Override protected void onResume(){super.onResume();if(returningFromSettings){returningFromSettings=false;if(prefs.getBoolean("configured",false))showKiosk();}}
+    @Override protected void onResume(){super.onResume();if(returningFromSettings){returningFromSettings=false;boolean configured=prefs.getBoolean("configured",false);if(configured)showKiosk();else showSetup(true);if(reopenBluetoothChooser){reopenBluetoothChooser=false;handler.postDelayed(()->selectBluetoothPrinter(null),500);}}}
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);handleUsbIntent(intent);}
     @Override public void onBackPressed(){if(!prefs.getBoolean("configured",false))super.onBackPressed();}
     @Override protected void onDestroy(){handler.removeCallbacks(refreshWatchdog);try{unregisterReceiver(usbPermissionReceiver);}catch(RuntimeException ignored){}if(connectivity!=null&&networkCallback!=null)try{connectivity.unregisterNetworkCallback(networkCallback);}catch(RuntimeException ignored){}closeBluetoothPrinter();closeNetworkPrinter();executor.shutdownNow();if(web!=null)web.destroy();super.onDestroy();}
