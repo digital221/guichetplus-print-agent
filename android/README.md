@@ -31,3 +31,7 @@ La WebView autorise la caméra à la demande pour le lecteur QR du parcours
 Guichet+, accepte les scanners USB/Bluetooth HID comme saisie clavier, recharge
 la page après une reconnexion réseau et effectue un rafraîchissement de garde
 toutes les 15 minutes uniquement après au moins 5 minutes sans interaction.
+
+L'orientation utilise le capteur complet de l'appareil (`fullSensor`) : portrait,
+paysage et leurs positions inversées sont appliqués automatiquement sans
+redémarrer la WebView.
