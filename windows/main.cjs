@@ -61,7 +61,7 @@ function startServer() {
         if (!transport) return json(res, 422, { error: 'Mode de connexion invalide' }, headers);
         if (transport === 'network' && (!String(data.printerHost || '').trim() || !Number.isInteger(port) || port < 1 || port > 65535)) return json(res, 422, { error: 'Adresse réseau invalide' }, headers);
         if (transport === 'windows' && !String(data.printerName || '').trim()) return json(res, 422, { error: 'Sélectionnez une imprimante USB/Bluetooth Windows' }, headers);
-        if (transport === 'serial' && (!/^COM\d+$/i.test(String(data.serialPort || '')) || ![9600,19200,38400,57600,115200].includes(baud))) return json(res, 422, { error: 'Port Bluetooth COM invalide' }, headers);
+        if (transport === 'serial' && (!/^COM\d+$/i.test(String(data.serialPort || '')) || ![9600,19200,38400,57600,115200,230400,460800,921600].includes(baud))) return json(res, 422, { error: 'Port Bluetooth virtuel COM invalide' }, headers);
         const profile = ['auto', 'native', 'legacy'].includes(data.printerProfile) ? data.printerProfile : 'auto';
         writeConfig({ transport, printerHost: String(data.printerHost || '').trim(), printerPort: port || 9100, printerName: String(data.printerName || '').trim(), serialPort: String(data.serialPort || '').toUpperCase(), serialBaud: baud, printerProfile: profile });
         return json(res, 200, readConfig(), headers);

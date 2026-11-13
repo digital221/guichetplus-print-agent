@@ -8,7 +8,7 @@ Trois transports sont disponibles et mémorisés :
 
 - réseau TCP, généralement sur le port `9100` ;
 - file d'impression Windows RAW pour une imprimante USB ou Bluetooth installée ;
-- port série Bluetooth `COM` à 9 600, 19 200, 38 400, 57 600 ou 115 200 bauds.
+- port série Bluetooth virtuel `COM`, de 9 600 à 921 600 bauds selon le matériel.
 
 Le bouton d'actualisation détecte les imprimantes et ports série disponibles.
 Une imprimante USB doit disposer de son pilote Windows. Une imprimante Bluetooth

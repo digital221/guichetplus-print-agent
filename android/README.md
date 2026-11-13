@@ -12,6 +12,11 @@ convertit les commandes graphiques courantes vers `ESC *` afin de conserver le
 logo sur les firmwares ESC/POS anciens ou partiels. Les profils natif et ancien
 modèle restent disponibles dans les réglages.
 
+La connexion Bluetooth classique et virtuelle utilise SPP/RFCOMM. Elle reste
+ouverte entre deux tickets pour réduire fortement la latence et se reconnecte
+automatiquement en cas de coupure. L'application essaie successivement les
+modes RFCOMM sécurisé, non sécurisé et le canal série 1 pour les modules OEM.
+
 La première configuration exige un mot de passe administrateur d'au moins
 8 caractères. Aucun mot de passe n'est fourni par défaut. L'application
 n'enregistre qu'un condensat SHA-256 salé. Un condensat déjà présent sur

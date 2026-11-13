@@ -48,6 +48,12 @@ public final class MainActivity extends Activity {
     private ConnectivityManager connectivity;
     private ConnectivityManager.NetworkCallback networkCallback;
     private UsbManager usbManager;
+    private Socket networkPrinterSocket;
+    private OutputStream networkPrinterOutput;
+    private String networkPrinterTarget="";
+    private BluetoothSocket bluetoothPrinterSocket;
+    private OutputStream bluetoothPrinterOutput;
+    private String bluetoothPrinterAddress="";
     private final BroadcastReceiver usbPermissionReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
             if (!ACTION_USB_PERMISSION.equals(intent.getAction())) return;
@@ -233,7 +239,17 @@ public final class MainActivity extends Activity {
         try{sendNetwork(data);return "réseau";}catch(Exception e){last=e;}
         throw last==null?new Exception("aucune imprimante configurée"):last;
     }
-    private void sendNetwork(byte[] data)throws Exception{String host=prefs.getString("host",PRINTER);int port=prefs.getInt("port",9100);try(Socket s=new Socket()){s.connect(new InetSocketAddress(host,port),4000);OutputStream o=s.getOutputStream();o.write(data);o.flush();}}
+    private void sendNetwork(byte[] data)throws Exception{
+        String host=prefs.getString("host",PRINTER);int port=prefs.getInt("port",9100);String target=host+":"+port;
+        for(int attempt=0;attempt<2;attempt++){
+            try{
+                if(networkPrinterSocket==null||networkPrinterSocket.isClosed()||!target.equals(networkPrinterTarget)){
+                    closeNetworkPrinter();networkPrinterSocket=new Socket();networkPrinterSocket.setTcpNoDelay(true);networkPrinterSocket.setKeepAlive(true);networkPrinterSocket.connect(new InetSocketAddress(host,port),2500);networkPrinterOutput=networkPrinterSocket.getOutputStream();networkPrinterTarget=target;
+                }
+                networkPrinterOutput.write(data);networkPrinterOutput.flush();return;
+            }catch(Exception error){closeNetworkPrinter();if(attempt==1)throw error;}
+        }
+    }
     private void sendUsb(byte[] data)throws Exception{
         UsbDevice device=findUsbPrinter();if(device==null)throw new Exception("imprimante USB non connectée");
         if(!usbManager.hasPermission(device)){runOnUiThread(()->requestUsbPermission(device));throw new Exception("autorisation USB requise");}
@@ -247,9 +263,28 @@ public final class MainActivity extends Activity {
         if(android.os.Build.VERSION.SDK_INT>=31&&checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED)throw new Exception("autorisation Bluetooth requise");
         String address=prefs.getString("bt_address","");if(address.isEmpty())throw new Exception("imprimante Bluetooth non sélectionnée");
         BluetoothAdapter adapter=BluetoothAdapter.getDefaultAdapter();if(adapter==null||!adapter.isEnabled())throw new Exception("Bluetooth désactivé");
-        BluetoothDevice device=adapter.getRemoteDevice(address);UUID spp=UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
-        try(BluetoothSocket socket=device.createRfcommSocketToServiceRecord(spp)){socket.connect();OutputStream out=socket.getOutputStream();out.write(data);out.flush();}
+        try{adapter.cancelDiscovery();}catch(SecurityException ignored){}
+        for(int attempt=0;attempt<2;attempt++){
+            try{
+                if(bluetoothPrinterSocket==null||!bluetoothPrinterSocket.isConnected()||!address.equals(bluetoothPrinterAddress))connectBluetoothPrinter(adapter.getRemoteDevice(address),address);
+                for(int offset=0;offset<data.length;){int length=Math.min(8192,data.length-offset);bluetoothPrinterOutput.write(data,offset,length);offset+=length;}
+                bluetoothPrinterOutput.flush();return;
+            }catch(Exception error){closeBluetoothPrinter();if(attempt==1)throw error;}
+        }
     }
+
+    private void connectBluetoothPrinter(BluetoothDevice device,String address)throws Exception{
+        closeBluetoothPrinter();UUID spp=UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");Exception last=null;
+        BluetoothSocket[] candidates=new BluetoothSocket[3];
+        try{candidates[0]=device.createRfcommSocketToServiceRecord(spp);}catch(Exception e){last=e;}
+        try{candidates[1]=device.createInsecureRfcommSocketToServiceRecord(spp);}catch(Exception e){last=e;}
+        try{candidates[2]=(BluetoothSocket)device.getClass().getMethod("createRfcommSocket",int.class).invoke(device,1);}catch(Exception e){last=e;}
+        for(BluetoothSocket candidate:candidates){if(candidate==null)continue;try{candidate.connect();bluetoothPrinterSocket=candidate;bluetoothPrinterOutput=candidate.getOutputStream();bluetoothPrinterAddress=address;return;}catch(Exception e){last=e;try{candidate.close();}catch(Exception ignored){}}}
+        throw last==null?new Exception("connexion Bluetooth SPP impossible"):last;
+    }
+
+    private void closeBluetoothPrinter(){try{if(bluetoothPrinterOutput!=null)bluetoothPrinterOutput.close();}catch(Exception ignored){}try{if(bluetoothPrinterSocket!=null)bluetoothPrinterSocket.close();}catch(Exception ignored){}bluetoothPrinterOutput=null;bluetoothPrinterSocket=null;bluetoothPrinterAddress="";}
+    private void closeNetworkPrinter(){try{if(networkPrinterOutput!=null)networkPrinterOutput.close();}catch(Exception ignored){}try{if(networkPrinterSocket!=null)networkPrinterSocket.close();}catch(Exception ignored){}networkPrinterOutput=null;networkPrinterSocket=null;networkPrinterTarget="";}
 
     private void selectUsbPrinter(Button button){
         ArrayList<UsbDevice> devices=new ArrayList<>(usbManager.getDeviceList().values());if(devices.isEmpty()){toast("Aucune imprimante USB détectée. Vérifiez le câble OTG.");return;}
@@ -269,7 +304,7 @@ public final class MainActivity extends Activity {
         BluetoothAdapter adapter=BluetoothAdapter.getDefaultAdapter();if(adapter==null){toast("Bluetooth indisponible");return;}if(!adapter.isEnabled()){openSettings(Settings.ACTION_BLUETOOTH_SETTINGS);return;}
         ArrayList<BluetoothDevice> devices=new ArrayList<>(adapter.getBondedDevices());if(devices.isEmpty()){toast("Aucune imprimante appairée. Appairez-la dans Android.");openSettings(Settings.ACTION_BLUETOOTH_SETTINGS);return;}
         String[] labels=new String[devices.size()];for(int i=0;i<devices.size();i++){BluetoothDevice d=devices.get(i);labels[i]=(d.getName()==null?"Bluetooth":d.getName())+" ("+d.getAddress()+")";}
-        new AlertDialog.Builder(this).setTitle("Imprimante Bluetooth appairée").setItems(labels,(dialog,which)->{BluetoothDevice d=devices.get(which);prefs.edit().putString("bt_address",d.getAddress()).putString("bt_name",labels[which]).putString("printer_mode","bluetooth").apply();button.setText("Bluetooth : "+labels[which]);}).setNegativeButton("Annuler",null).show();
+        new AlertDialog.Builder(this).setTitle("Imprimante Bluetooth ou virtuelle").setItems(labels,(dialog,which)->{BluetoothDevice d=devices.get(which);closeBluetoothPrinter();prefs.edit().putString("bt_address",d.getAddress()).putString("bt_name",labels[which]).putString("printer_mode","bluetooth").apply();button.setText("Bluetooth : "+labels[which]);}).setNegativeButton("Annuler",null).show();
     }
 
     private boolean save(EditText u, EditText h, EditText p, EditText password, Spinner printerMode, Spinner printerProfile, boolean configured) {
@@ -358,5 +393,5 @@ public final class MainActivity extends Activity {
     @Override protected void onResume(){super.onResume();if(returningFromSettings){returningFromSettings=false;if(prefs.getBoolean("configured",false))showKiosk();}}
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);handleUsbIntent(intent);}
     @Override public void onBackPressed(){if(!prefs.getBoolean("configured",false))super.onBackPressed();}
-    @Override protected void onDestroy(){handler.removeCallbacks(refreshWatchdog);try{unregisterReceiver(usbPermissionReceiver);}catch(RuntimeException ignored){}if(connectivity!=null&&networkCallback!=null)try{connectivity.unregisterNetworkCallback(networkCallback);}catch(RuntimeException ignored){}executor.shutdownNow();if(web!=null)web.destroy();super.onDestroy();}
+    @Override protected void onDestroy(){handler.removeCallbacks(refreshWatchdog);try{unregisterReceiver(usbPermissionReceiver);}catch(RuntimeException ignored){}if(connectivity!=null&&networkCallback!=null)try{connectivity.unregisterNetworkCallback(networkCallback);}catch(RuntimeException ignored){}closeBluetoothPrinter();closeNetworkPrinter();executor.shutdownNow();if(web!=null)web.destroy();super.onDestroy();}
 }
