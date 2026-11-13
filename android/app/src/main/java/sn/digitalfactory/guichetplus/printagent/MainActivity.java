@@ -40,6 +40,7 @@ public final class MainActivity extends Activity {
     private DevicePolicyManager dpm;
     private ComponentName admin;
     private WebView web;
+    private TextView currentWifiLabel;
     private boolean returningFromSettings;
     private boolean reopenBluetoothChooser;
     private int taps;
@@ -76,6 +77,7 @@ public final class MainActivity extends Activity {
         super.onCreate(b);
         keepScreenAwake();
         prefs = getSharedPreferences("agent", MODE_PRIVATE);
+        connectivity=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
         if(!prefs.getBoolean("configured",false)&&LEGACY_DEFAULT_PRINTER.equals(prefs.getString("host","")))prefs.edit().remove("host").apply();
         usbManager = (UsbManager)getSystemService(USB_SERVICE);
         IntentFilter usbFilter = new IntentFilter(ACTION_USB_PERMISSION);
@@ -112,7 +114,7 @@ public final class MainActivity extends Activity {
         Button usb=secondaryButton(prefs.contains("usb_vendor")?"USB · "+prefs.getString("usb_name","enregistrée"):"Connecter une imprimante USB");usb.setOnClickListener(v->{printerMode.setSelection(2);selectUsbPrinter(usb);});card.addView(usb,fixedLp(52,8));
         Button bluetooth=secondaryButton(prefs.contains("bt_address")?"Bluetooth · "+prefs.getString("bt_name","enregistrée"):"Connecter une imprimante Bluetooth");bluetooth.setOnClickListener(v->{printerMode.setSelection(3);selectBluetoothPrinter(bluetooth);});card.addView(bluetooth,fixedLp(52,22));
         card.addView(sectionLabel("03  CONNEXION ET SÉCURITÉ"),lp(10));
-        TextView currentWifi=text("Wi-Fi actuel  ·  "+wifiName(),15,true);card.addView(currentWifi,lp(8));
+        currentWifiLabel=text("Wi-Fi actuel  ·  "+wifiName(),15,true);card.addView(currentWifiLabel,lp(8));
         Button wifi=secondaryButton("Sélectionner le réseau Wi-Fi"); wifi.setOnClickListener(v->openSettings(Settings.ACTION_WIFI_SETTINGS)); card.addView(wifi,fixedLp(52,8));
         Button camera=button(checkSelfPermission(android.Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED?"Caméra QR autorisée":"Autoriser la caméra pour les QR codes");
         camera.setBackgroundResource(R.drawable.setup_button_secondary);camera.setOnClickListener(v->requestPermissions(new String[]{android.Manifest.permission.CAMERA},40));card.addView(camera,fixedLp(52,10));
@@ -123,7 +125,7 @@ public final class MainActivity extends Activity {
         Button test=secondaryButton("Imprimer un ticket de test"); test.setOnClickListener(v->{if(save(url,host,port,password,passwordConfirmation,printerMode,printerProfile,false))printTest();});card.addView(test,fixedLp(52,10));
         Button done=primaryButton(first?"Lancer ma borne":"Enregistrer et retourner au kiosk");done.setOnClickListener(v->{if(save(url,host,port,password,passwordConfirmation,printerMode,printerProfile,true))showKiosk();});card.addView(done,fixedLp(58,0));
         TextView footer=text("DIGITAL FACTORY  ·  BORNE SÉCURISÉE",12,true);footer.setTextColor(Color.rgb(177,216,213));footer.setGravity(Gravity.CENTER);root.addView(footer,lp(0));
-        scroll.addView(root,new ScrollView.LayoutParams(-1,-2));backdrop.addView(scroll,new FrameLayout.LayoutParams(-1,-1));setContentView(backdrop);
+        scroll.addView(root,new ScrollView.LayoutParams(-1,-2));backdrop.addView(scroll,new FrameLayout.LayoutParams(-1,-1));setContentView(backdrop);requestWifiIdentityPermission();
     }
 
     private void showKiosk() {
@@ -406,7 +408,23 @@ public final class MainActivity extends Activity {
     }
     private int modeIndex(String value){for(int i=0;i<PRINTER_MODE_VALUES.length;i++)if(PRINTER_MODE_VALUES[i].equals(value))return i;return 1;}
     private int profileIndex(String value){for(int i=0;i<PRINTER_PROFILE_VALUES.length;i++)if(PRINTER_PROFILE_VALUES[i].equals(value))return i;return 0;}
-    private String wifiName(){try{WifiInfo i=((WifiManager)getApplicationContext().getSystemService(WIFI_SERVICE)).getConnectionInfo();String s=i==null?null:i.getSSID();return s==null||"<unknown ssid>".equals(s)?"à sélectionner":s.replace("\"","");}catch(Exception e){return "à sélectionner";}}
+    private void requestWifiIdentityPermission(){
+        ArrayList<String> missing=new ArrayList<>();
+        if(android.os.Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.NEARBY_WIFI_DEVICES)!=PackageManager.PERMISSION_GRANTED)missing.add(android.Manifest.permission.NEARBY_WIFI_DEVICES);
+        if(checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED)missing.add(android.Manifest.permission.ACCESS_FINE_LOCATION);
+        if(!missing.isEmpty())requestPermissions(missing.toArray(new String[0]),42);
+    }
+    private String wifiName(){
+        try{
+            WifiInfo info=null;Network active=connectivity==null?null:connectivity.getActiveNetwork();NetworkCapabilities caps=active==null?null:connectivity.getNetworkCapabilities(active);
+            if(caps!=null&&caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)&&caps.getTransportInfo() instanceof WifiInfo)info=(WifiInfo)caps.getTransportInfo();
+            String ssid=info==null?null:info.getSSID();
+            if(ssid==null||"<unknown ssid>".equalsIgnoreCase(ssid)){info=((WifiManager)getApplicationContext().getSystemService(WIFI_SERVICE)).getConnectionInfo();ssid=info==null?null:info.getSSID();}
+            if(ssid!=null&&!"<unknown ssid>".equalsIgnoreCase(ssid))return ssid.replace("\"","");
+            if(caps!=null&&caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI))return "connecté (nom du réseau masqué)";
+        }catch(Exception ignored){}
+        return "non connecté";
+    }
     private EditText field(String hint,String value){EditText e=new EditText(this);e.setHint(hint);e.setText(value);e.setSingleLine(true);e.setTextSize(16);e.setTextColor(Color.rgb(15,42,49));e.setHintTextColor(Color.rgb(105,126,130));e.setPadding(dp(15),0,dp(15),0);e.setBackgroundResource(R.drawable.setup_field);e.setSelectAllOnFocus(false);return e;}
     private Button button(String value){Button b=new Button(this);b.setText(value);b.setAllCaps(false);return b;}
     private Button primaryButton(String value){Button b=button(value);b.setTextColor(Color.WHITE);b.setTextSize(16);b.setTypeface(null,android.graphics.Typeface.BOLD);b.setBackgroundResource(R.drawable.setup_button_primary);return b;}
@@ -421,7 +439,7 @@ public final class MainActivity extends Activity {
     private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();}
     private void immersive(){getWindow().getDecorView().setSystemUiVisibility(5894|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);}
     private void showBars(){getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);}
-    @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] results){super.onRequestPermissionsResult(requestCode,permissions,results);if(requestCode==40&&cameraRequest!=null){if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)cameraRequest.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});else cameraRequest.deny();cameraRequest=null;}}
+    @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] results){super.onRequestPermissionsResult(requestCode,permissions,results);if(requestCode==40&&cameraRequest!=null){if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)cameraRequest.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});else cameraRequest.deny();cameraRequest=null;}if(requestCode==42&&currentWifiLabel!=null){currentWifiLabel.setText("Wi-Fi actuel  ·  "+wifiName());if(results.length==0||results[0]!=PackageManager.PERMISSION_GRANTED)toast("Autorisez les appareils Wi-Fi à proximité pour afficher le nom du réseau.");}}
     @Override protected void onResume(){super.onResume();if(returningFromSettings){returningFromSettings=false;boolean configured=prefs.getBoolean("configured",false);if(configured)showKiosk();else showSetup(true);if(reopenBluetoothChooser){reopenBluetoothChooser=false;handler.postDelayed(()->selectBluetoothPrinter(null),500);}}}
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);handleUsbIntent(intent);}
     @Override public void onBackPressed(){if(!prefs.getBoolean("configured",false))super.onBackPressed();}
